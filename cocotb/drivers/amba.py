@@ -33,8 +33,8 @@ import cocotb
 from cocotb.binary import BinaryValue
 from cocotb.drivers import BusDriver
 from cocotb.result import ReturnValue
-from cocotb.triggers import (ClockCycles, FallingEdge, Lock, ReadOnly,
-                             RisingEdge)
+from cocotb.triggers import (ClockCycles, FallingEdge, Lock, NextTimeStep,
+                             ReadOnly, RisingEdge)
 
 
 class AXIProtocolError(Exception):
@@ -437,13 +437,14 @@ class Axi4StreamMaster(BusDriver):
                index == len(data) - 1:
                 self.bus.TLAST <= 1
 
+            yield RisingEdge(self.clock)
+
             while True:
                 yield ReadOnly()
                 if not hasattr(self.bus, "TREADY") or self.bus.TREADY.value:
+                    yield NextTimeStep()  # Can't write during read-only phase
                     break
                 yield RisingEdge(self.clock)
-
-            yield RisingEdge(self.clock)
 
         if hasattr(self.bus, "TLAST") and tlast_on_last:
             self.bus.TLAST <= 0
