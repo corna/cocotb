@@ -280,7 +280,8 @@ class AXI4Master(BusDriver):
         return result
 
     @cocotb.coroutine
-    def read(self, address, length=1, size=None, burst="INCR", sync=True):
+    def read(self, address, length=1, size=None, burst="INCR",
+             return_rresp=False, sync=True):
         """Read from an address.
 
         Args:
@@ -291,15 +292,21 @@ class AXI4Master(BusDriver):
                 Defaults to the width of the data bus.
             burst (str, optional): The burst type, either FIXED, INCR or WRAP.
                 Defaults to INCR.
+            return_rresp (bool, optional): Return the list of RRESP values,
+                instead of raising a AXIProtocolError.
+                Defaults to False.
             sync (bool, optional): Wait for rising edge on clock initially.
                 Defaults to True.
 
         Returns:
-            List[BinaryValue]: The read data values.
+            Union[List[BinaryValue], List[Tuple[BinaryValue, BinaryValue]]]:
+                The read data values or, if return_rresp is True, a list of
+                pairs each containing the data and RRESP values.
 
         Raises:
             TestError: If any of the input parameters is invalid.
-            AXIProtocolError: If read response from AXI is not ``OKAY``.
+            AXIProtocolError: If read response from AXI is not ``OKAY`` and
+                return_rresp is False.
         """
 
         AXI4Master._check_burst(burst)
@@ -351,21 +358,24 @@ class AXI4Master(BusDriver):
 
             yield RisingEdge(self.clock)
 
-        for beat_number, beat_result in enumerate(rresp):
-            if beat_result:
-                if length == 1:
-                    err_msg = "Read on address {1:#x}"
-                else:
-                    err_msg = "Read on beat {0} (start address {1:#x})"
-                err_msg += " failed with RRESP: {2} ({3})"
+        if return_rresp:
+            raise ReturnValue([(data[i], rresp[i]) for i in range(len(data))])
+        else:
+            for beat_number, beat_result in enumerate(rresp):
+                if beat_result:
+                    if length == 1:
+                        err_msg = "Read on address {1:#x}"
+                    else:
+                        err_msg = "Read on beat {0} (start address {1:#x})"
+                    err_msg += " failed with RRESP: {2} ({3})"
 
-                err_msg = err_msg.format(
-                    beat_number, address, beat_result.integer,
-                    AXI4Master._xRESP_msg[beat_result.integer])
+                    err_msg = err_msg.format(
+                        beat_number, address, beat_result.integer,
+                        AXI4Master._xRESP_msg[beat_result.integer])
 
-                raise AXIProtocolError(err_msg)
+                    raise AXIProtocolError(err_msg)
 
-        return data
+            raise ReturnValue(data)
 
     def __len__(self):
         return 2**len(self.bus.ARADDR)
@@ -436,7 +446,8 @@ class AXI4LiteMaster(AXI4Master):
         """
 
         ret = yield super(AXI4LiteMaster, self).read(
-            address=address, length=1, size=None, burst="INCR", sync=sync)
+            address=address, length=1, size=None, burst="INCR",
+            return_rresp=False, sync=sync)
         raise ReturnValue(ret[0])
 
 
