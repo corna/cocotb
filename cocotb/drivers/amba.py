@@ -306,7 +306,8 @@ class AXI4Master(BusDriver):
         Raises:
             TestError: If any of the input parameters is invalid.
             AXIProtocolError: If read response from AXI is not ``OKAY`` and
-                return_rresp is False.
+                return_rresp is False, or if the received number of words does
+                not match the requested one.
         """
 
         AXI4Master._check_burst(burst)
@@ -357,6 +358,14 @@ class AXI4Master(BusDriver):
                 break
 
             yield RisingEdge(self.clock)
+
+        if len(data) != length:
+            err_msg = "AXI4 slave returned {} data than expected (requested " \
+                      "{} words, received {})"
+            err_msg = err_msg.format(
+                "more" if len(data) > length else "less", length, len(data))
+
+            raise AXIProtocolError(err_msg)
 
         if return_rresp:
             raise ReturnValue([(data[i], rresp[i]) for i in range(len(data))])
